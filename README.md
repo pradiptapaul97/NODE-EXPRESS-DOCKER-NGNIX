@@ -247,6 +247,52 @@ docker-compose down
 
 ---
 
+## Why Node Ports Are Not Visible in `docker ps`
+
+When you run `docker ps`, you'll notice Node containers show no ports:
+
+```
+NAMES   IMAGE        PORTS
+nginx   nginx:alpine 0.0.0.0:80->80/tcp   ← exposed to host
+node1   node-app                          ← no port shown
+node2   node-app                          ← no port shown
+node3   node-app                          ← no port shown
+```
+
+This is intentional. Here's why:
+
+```
+Your Machine (Host)
+      |
+      | port 80 only
+      v
+   NGINX container          ← only NGINX is exposed to host
+      |
+      | internal Docker network (no host access)
+      |
+   node1:3000
+   node2:3000
+   node3:3000
+```
+
+- Only `nginx` has `ports: "80:80"` in `docker-compose.yml` — that maps host → container
+- Node containers have no `ports:` defined — they are intentionally private
+- NGINX talks to them via Docker's internal network using service names (`node1`, `node2`, `node3`)
+- Clients should never talk directly to Node containers — only through NGINX
+- **Why:** If Node ports were exposed, anyone could bypass NGINX and hit them directly, defeating the purpose of the load balancer
+
+To confirm Node containers are reachable internally, run:
+
+```bash
+docker exec nginx curl http://node1:3000
+docker exec nginx curl http://node2:3000
+docker exec nginx curl http://node3:3000
+```
+
+Each should return a response with a different `pid`.
+
+---
+
 ## Why Horizontal Scaling?
 
 | Vertical Scaling | Horizontal Scaling |
