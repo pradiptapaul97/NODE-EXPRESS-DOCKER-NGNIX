@@ -247,6 +247,85 @@ docker-compose down
 
 ---
 
+## NGINX Config Explained (`nginx.conf`)
+
+```nginx
+events {}  # Required block — handles connection processing (empty = use defaults)
+```
+- Every `nginx.conf` must have an `events` block
+- Leaving it empty tells NGINX to use its default connection handling settings
+- **Why:** Without this block, NGINX will throw a config error and refuse to start
+
+---
+
+```nginx
+http {
+```
+- Opens the `http` block — everything related to HTTP traffic is defined inside here
+- **Why:** NGINX can also handle TCP/UDP (in a `stream` block), so we explicitly tell it this is HTTP traffic
+
+---
+
+```nginx
+  upstream node_cluster {
+    server node1:3000;
+    server node2:3000;
+    server node3:3000;
+  }
+```
+- `upstream` — defines a named group of backend servers called `node_cluster`
+- `node1`, `node2`, `node3` — these are Docker service names, Docker's internal DNS resolves them to each container's IP automatically
+- `:3000` — the port each Node container is listening on inside the Docker network
+- No algorithm specified — defaults to **round-robin** (requests distributed 1 → 2 → 3 → 1 → 2 → 3...)
+- **Why:** Grouping servers under one name lets NGINX treat them as a single unit and load balance across them
+
+---
+
+```nginx
+  server {
+    listen 80;
+```
+- `server` — defines a virtual server (like a website config)
+- `listen 80` — NGINX listens for incoming HTTP traffic on port 80
+- **Why:** Port 80 is the default HTTP port — browsers and `curl http://localhost` hit this automatically without needing to specify a port
+
+---
+
+```nginx
+    location / {
+```
+- `location /` — matches ALL incoming request paths (e.g. `/`, `/api`, `/anything`)
+- **Why:** We want every request forwarded to Node, so we catch everything with `/`
+
+---
+
+```nginx
+      proxy_pass http://node_cluster;
+```
+- Forwards the incoming request to one of the servers in the `node_cluster` upstream group
+- NGINX picks which Node container to send it to using round-robin
+- **Why:** This is the core of load balancing — NGINX acts as a middleman between the client and Node containers
+
+---
+
+```nginx
+      proxy_set_header Host $host;
+```
+- Passes the original `Host` header from the client request to the Node server
+- `$host` — NGINX variable that holds the hostname from the incoming request (e.g. `localhost`)
+- **Why:** Without this, Node would see NGINX's internal hostname instead of the original one the client used
+
+---
+
+```nginx
+      proxy_set_header X-Real-IP $remote_addr;
+```
+- Passes the real client IP address to the Node server
+- `$remote_addr` — NGINX variable that holds the actual IP of the client making the request
+- **Why:** Without this, Node would see NGINX's container IP as the requester instead of the real client IP — important for logging and security
+
+---
+
 ## Why Node Ports Are Not Visible in `docker ps`
 
 When you run `docker ps`, you'll notice Node containers show no ports:
