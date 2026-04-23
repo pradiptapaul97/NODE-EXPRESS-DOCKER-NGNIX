@@ -2,24 +2,28 @@ services:
 
   node1:                         # First Node.js container (horizontal instance #1)
     container_name: node1
-    build: .                     # Build image using the Dockerfile in the current directory
+    image: node-app              # Names the built image as "node-app"
+    build: .                     # Build the image from local Dockerfile
     environment:
-      - PORT=3000                # Set PORT environment variable inside the container
+      - PORT=3000
 
   node2:                         # Second Node.js container (horizontal instance #2)
     container_name: node2
-    build: .                     # Same Dockerfile — same image, separate container
+    image: node-app              # Reuses the locally built "node-app" image
+    build: .                     # Tells Docker this is a local build, not a pull
     environment:
-      - PORT=3000                # Each instance listens on port 3000 inside its own container
+      - PORT=3000
 
   node3:                         # Third Node.js container (horizontal instance #3)
     container_name: node3
-    build: .
+    image: node-app              # Reuses the locally built "node-app" image
+    build: .                     # Tells Docker this is a local build, not a pull
     environment:
       - PORT=3000
 
   nginx:
-    image: nginx:alpine          # Use the official lightweight NGINX image
+    container_name: nginx
+    image: nginx:alpine          # Official lightweight NGINX image
     ports:
       - "80:80"                  # Map host port 80 to container port 80 (public entry point)
     volumes:

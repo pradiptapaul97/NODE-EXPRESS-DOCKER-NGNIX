@@ -17,8 +17,9 @@ Client Request
       |                      node3:3000
 ```
 
-NGINX receives all incoming traffic and distributes it evenly across 3 Node.js containers.
-Each container is an identical copy of the same Express app running as an independent process.
+- NGINX receives all incoming traffic and distributes it evenly across 3 Node.js containers
+- All 3 Node containers share a **single Docker image** called `node-app`
+- Each container is an independent process running from the same image
 
 ---
 
@@ -37,8 +38,6 @@ NGINX-NODE/
 
 ## Prerequisites
 
-Make sure you have these installed before running anything:
-
 - [Docker](https://www.docker.com/products/docker-desktop)
 - [Docker Compose](https://docs.docker.com/compose/install/) (included with Docker Desktop)
 
@@ -49,38 +48,36 @@ Make sure you have these installed before running anything:
 ### 1. Build and Start the Project
 
 ```bash
-docker-compose up --build
-```
-
-- `docker-compose up` — starts all services defined in `docker-compose.yml`
-- `--build` — forces Docker to rebuild the Node.js image from the `Dockerfile`
-- **Why:** First time setup or after any code change, you need to rebuild the image so the latest code is packaged into the container
-
----
-
-### 2. Run in Background (Detached Mode)
-
-```bash
 docker-compose up --build -d
 ```
 
+- `up` — starts all services defined in `docker-compose.yml`
+- `--build` — builds the `node-app` image from the `Dockerfile` (only built once, shared across node1/node2/node3)
 - `-d` — runs all containers in the background (detached mode)
-- **Why:** Frees up your terminal so you can run other commands while the project is running
+- **Why:** First time setup or after any code change — rebuilds the shared image and starts all 4 containers (3 Node + 1 NGINX)
 
 ---
 
-### 3. Check Running Containers
+### 2. Check Running Containers
 
 ```bash
 docker-compose ps
 ```
 
-- Lists all containers managed by this `docker-compose.yml` with their status and ports
-- **Why:** Verify that all 3 Node instances and NGINX are actually running before testing
+- Lists all containers with their name, status, and ports
+- **Why:** Confirm that `node1`, `node2`, `node3`, and `nginx` are all running before testing
+- Expected output:
+```
+NAME      STATUS    PORTS
+node1     running   3000/tcp
+node2     running   3000/tcp
+node3     running   3000/tcp
+nginx     running   0.0.0.0:80->80/tcp
+```
 
 ---
 
-### 4. Test Load Balancing
+### 3. Test Load Balancing
 
 ```bash
 curl http://localhost
@@ -89,106 +86,111 @@ curl http://localhost
 - Sends an HTTP GET request to NGINX on port 80
 - NGINX forwards it to one of the Node containers via round-robin
 - **Why:** Run this multiple times — each response will show a different `pid` (process ID), proving that different containers are handling your requests
-
----
-
-### 5. Scale Up Node Instances
-
-```bash
-docker-compose up --scale node1=5 --build
+- Expected output:
+```json
+{ "message": "Hello from Node!", "pid": 1, "port": "3000" }
 ```
 
-- `--scale node1=5` — spins up 5 instances of the `node1` service instead of 1
-- **Why:** Simulate higher traffic load — more instances means more requests can be handled in parallel, this is the core idea of horizontal scaling
+---
+
+### 4. Scale Up Node Instances
+
+```bash
+docker-compose up --scale node1=5 -d
+```
+
+- `--scale node1=5` — spins up 5 instances of the `node1` service
+- All 5 instances use the same `node-app` image — no extra builds needed
+- **Why:** Simulate higher traffic — more instances means more requests handled in parallel, this is the core idea of horizontal scaling
 
 ---
 
-### 6. View Logs of All Containers
+### 5. View Logs of All Containers
 
 ```bash
 docker-compose logs -f
 ```
 
-- `logs` — prints the output (stdout) of all running containers
-- `-f` — follows/streams logs in real time (like `tail -f`)
-- **Why:** See which Node instance is receiving requests and debug any errors across all services at once
+- `logs` — prints stdout of all running containers
+- `-f` — streams logs in real time
+- **Why:** See which Node instance is receiving each request and debug errors across all services at once
 
 ---
 
-### 7. View Logs of a Specific Service
+### 6. View Logs of a Specific Container
 
 ```bash
 docker-compose logs -f node1
 docker-compose logs -f nginx
 ```
 
-- Filters logs to only show output from `node1` or `nginx`
-- **Why:** Useful when you want to isolate and debug a specific container without noise from others
+- Filters logs to only show output from the specified container
+- **Why:** Isolate and debug a specific container without noise from others
 
 ---
 
-### 8. Stop All Containers (Keep Data)
+### 7. Stop All Containers (Keep Data)
 
 ```bash
 docker-compose stop
 ```
 
 - Stops all running containers but does NOT remove them
-- **Why:** Use this when you want to pause the project and restart it later quickly without rebuilding
+- **Why:** Pause the project and restart it later quickly without rebuilding
 
 ---
 
-### 9. Restart All Containers
+### 8. Restart All Containers
 
 ```bash
 docker-compose restart
 ```
 
-- Restarts all containers without rebuilding the images
-- **Why:** Useful when you've changed a config file (like `nginx.conf`) and need to apply changes without a full rebuild
+- Restarts all containers without rebuilding images
+- **Why:** Apply config changes (like `nginx.conf`) without a full rebuild
 
 ---
 
-### 10. Stop and Remove Everything
+### 9. Stop and Remove Everything
 
 ```bash
 docker-compose down
 ```
 
-- Stops all containers AND removes them along with the default network
-- **Why:** Clean shutdown — use this when you are done with the project or want a completely fresh start on next `up`
+- Stops and removes all containers and the default network
+- **Why:** Clean shutdown — use this when done or before a fresh start
 
 ---
 
-### 11. Remove Everything Including Images
+### 10. Remove Everything Including Images
 
 ```bash
 docker-compose down --rmi all
 ```
 
-- `--rmi all` — also deletes all Docker images built for this project
-- **Why:** Full cleanup — frees up disk space and ensures the next `up --build` starts from a completely clean state
+- `--rmi all` — also deletes the `node-app` image and `nginx:alpine` image
+- **Why:** Full cleanup — frees disk space and ensures the next `--build` starts completely fresh
 
 ---
 
-### 12. Check Resource Usage
+### 11. Check Resource Usage
 
 ```bash
 docker stats
 ```
 
-- Shows real-time CPU, memory, and network usage for all running containers
-- **Why:** Monitor how each Node instance is performing under load and identify if any container is being overloaded
+- Shows real-time CPU, memory, and network usage per container
+- **Why:** Monitor how each Node instance performs under load and spot any overloaded container
 
 ---
 
 ## Full Workflow (Start to Finish)
 
 ```bash
-# Step 1 — Build and start all containers
+# Step 1 — Build the shared node-app image and start all containers
 docker-compose up --build -d
 
-# Step 2 — Confirm everything is running
+# Step 2 — Confirm all 4 containers are running
 docker-compose ps
 
 # Step 3 — Hit the server multiple times to see load balancing in action
@@ -196,15 +198,26 @@ curl http://localhost
 curl http://localhost
 curl http://localhost
 
-# Step 4 — Scale up to handle more traffic
+# Step 4 — Scale up to handle more traffic (all instances reuse the same image)
 docker-compose up --scale node1=5 -d
 
-# Step 5 — Monitor logs
+# Step 5 — Monitor logs across all containers
 docker-compose logs -f
 
 # Step 6 — Shut everything down when done
 docker-compose down
 ```
+
+---
+
+## Shared Image vs Separate Images
+
+| Separate Images (old) | Shared Image (current) |
+|---|---|
+| Each service builds its own image | All 3 Node containers use one `node-app` image |
+| 3 builds on every `--build` | 1 build, reused 3 times |
+| More disk space used | Efficient — image layers shared |
+| Harder to manage updates | Update once, all containers get the change |
 
 ---
 
