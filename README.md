@@ -7,19 +7,45 @@ A simple Express.js server scaled horizontally using NGINX as a load balancer, a
 ## How It Works
 
 ```
-Client Request
-      |
-      v
-  NGINX :80  (Load Balancer)
-      |
-      |--- Round Robin --->  node1:3000
-      |                      node2:3000
-      |                      node3:3000
+                          ┌─────────────────────────────────────────────┐
+                          │            docker-compose network            │
+                          │                                              │
+   You (Browser/curl)     │   ┌─────────────────────────────────────┐   │
+         │                │   │         NGINX  (port 80)             │   │
+         │  HTTP Request  │   │         Load Balancer                │   │
+         └──────────────► │   └──────────────┬──────────────────────┘   │
+                          │                  │                           │
+                          │       Round Robin│Distribution               │
+                          │                  │                           │
+                          │    ┌─────────────┼─────────────┐             │
+                          │    │             │             │             │
+                          │    ▼             ▼             ▼             │
+                          │ ┌──────┐     ┌──────┐     ┌──────┐          │
+                          │ │node1 │     │node2 │     │node3 │          │
+                          │ │:3000 │     │:3000 │     │:3000 │          │
+                          │ └──────┘     └──────┘     └──────┘          │
+                          │  node-app    node-app      node-app          │
+                          │  (image)     (image)       (image)           │
+                          └─────────────────────────────────────────────┘
+```
+
+### Round Robin — Request by Request
+
+```
+Request 1  ──►  NGINX  ──►  node1  (pid: 101)
+Request 2  ──►  NGINX  ──►  node2  (pid: 202)
+Request 3  ──►  NGINX  ──►  node3  (pid: 303)
+Request 4  ──►  NGINX  ──►  node1  (pid: 101)  ← back to start
+Request 5  ──►  NGINX  ──►  node2  (pid: 202)
+Request 6  ──►  NGINX  ──►  node3  (pid: 303)
+    ...              repeats forever
+Request N  ──►  NGINX  ──►  node(N % 3)        ← always cycles 1 → 2 → 3
 ```
 
 - NGINX receives all incoming traffic and distributes it evenly across 3 Node.js containers
 - All 3 Node containers share a **single Docker image** called `node-app`
 - Each container is an independent process running from the same image
+- Every response returns a different `pid` — proof that a different container handled the request
 
 ---
 
