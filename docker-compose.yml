@@ -1,0 +1,30 @@
+services:
+
+  node1:                         # First Node.js container (horizontal instance #1)
+    container_name: node1
+    build: .                     # Build image using the Dockerfile in the current directory
+    environment:
+      - PORT=3000                # Set PORT environment variable inside the container
+
+  node2:                         # Second Node.js container (horizontal instance #2)
+    container_name: node2
+    build: .                     # Same Dockerfile — same image, separate container
+    environment:
+      - PORT=3000                # Each instance listens on port 3000 inside its own container
+
+  node3:                         # Third Node.js container (horizontal instance #3)
+    container_name: node3
+    build: .
+    environment:
+      - PORT=3000
+
+  nginx:
+    image: nginx:alpine          # Use the official lightweight NGINX image
+    ports:
+      - "80:80"                  # Map host port 80 to container port 80 (public entry point)
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro  # Mount our custom config into NGINX (read-only)
+    depends_on:
+      - node1                    # Ensure node1 starts before NGINX
+      - node2                    # Ensure node2 starts before NGINX
+      - node3                    # Ensure node3 starts before NGINX
